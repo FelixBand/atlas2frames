@@ -34,12 +34,33 @@ LONG = {
     "Matrix3D": "M3D", "symbolType": "ST", "firstFrame": "FF", "loop": "LP",
     "transformationPoint": "TRP", "Instance_Name": "IN", "color": "C",
     "name": "N", "STAGE_INSTANCE": "STI", "metadata": "MD", "framerate": "FRT",
+    # some exports spell these differently
+    "Frames": "FR", "Clipped_by": "Clpb",
+    # long-form colour effects
+    "mode": "M", "alphaMultiplier": "AM", "brightness": "BRT",
+    "tintColor": "TC", "tintMultiplier": "TM",
+    "redMultiplier": "RM", "greenMultiplier": "GM", "blueMultiplier": "BM",
+    "redOffset": "RO", "greenOffset": "GO", "blueOffset": "BO", "alphaOffset": "AO",
+}
+
+# Long-form string values -> the short codes used internally.
+VALUES = {
+    "ST": {"graphic": "G", "movieclip": "MC", "button": "B"},
+    "LP": {"loop": "LP", "playonce": "PO", "singleframe": "SF"},
+    "M": {"alpha": "CA", "brightness": "CBRT", "tint": "T", "advanced": "AD"},
 }
 
 
 def normalize(o):
     if isinstance(o, dict):
-        return {LONG.get(k, k): normalize(v) for k, v in o.items()}
+        out = {}
+        for k, v in o.items():
+            k = LONG.get(k, k)
+            v = normalize(v)
+            if isinstance(v, str) and k in VALUES:
+                v = VALUES[k].get(v.lower(), v)
+            out[k] = v
+        return out
     if isinstance(o, list):
         return [normalize(v) for v in o]
     return o
@@ -73,7 +94,7 @@ def parse_fx(c):
     mode = c.get("M")
     if mode in ("CA", "AA"):
         return ((1, 1, 1, c.get("AM", 1)), (0, 0, 0, 0))
-    if mode == "CBRA":
+    if mode in ("CBRA", "CBRT"):
         b = c.get("BRT", 0)
         if b >= 0:
             return ((1 - b,) * 3 + (1,), (255 * b,) * 3 + (0,))
@@ -178,7 +199,7 @@ class Atlas:
     def labels(self, tl):
         out = []
         for layer in tl["L"]:
-            for f in layer["FR"]:
+            for f in layer.get("FR", []):
                 if f.get("N"):
                     out.append((f["N"], f["I"], f["I"] + f["DU"]))
         return sorted(out, key=lambda x: x[1])
@@ -191,7 +212,7 @@ class Atlas:
         for layer in reversed(tl["L"]):  # first layer = top, so draw last
             if self.is_helper_layer(layer):
                 continue
-            if layer.get("LT") == "Clp":
+            if layer.get("LT") in ("Clp", "Clipper"):
                 self.warn("mask", "mask layers found: masks are NOT applied (clipped art drawn unmasked)")
                 continue
             frame = self.frame_at(layer, t)
